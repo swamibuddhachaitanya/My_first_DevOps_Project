@@ -1,22 +1,14 @@
-﻿## Make additions in the server code then only run this script.
-## Before running this, initialize the version variable in the PowerShell CLI to $curr_version = "0.0"
+##make additions in the server code then only run this script.
+##before running this initialise the version variable in the powershell cli to $curr_version= "0.0"
 
-# Define variables
-$resource_group = "Tutorial"
-$acr_name = "acrforautomation"
-$docker_image_name = "basic-node-app"
-$dockerfilePath = "C:\Path\To\Dockerfile"
-$prev_version = [version]$curr_version
-$prev_version = $prev_version.ToString()
-
-# Increment the version number
-$curr_version = [version]$curr_version
-$curr_version = [version]::new($curr_version.Major, $curr_version.Minor + 1)
-$curr_version = $curr_version.ToString()
-
-# Build the image with the new version
-docker build -t "${docker_image_name}:latest" -f "${dockerfilePath}" .
-docker tag "${docker_image_name}:latest" "${acr_name}.azurecr.io/${docker_image_name}:${curr_version}"
+# Define your variables here
+$sp_client_id = "YOUR_SERVICE_PRINCIPAL_CLIENT_ID"
+$sp_client_pswd = "YOUR_SERVICE_PRINCIPAL_CLIENT_SECRET"
+$sp_tenant_id = "YOUR_SERVICE_PRINCIPAL_TENANT_ID"
+$resource_group = "YOUR_RESOURCE_GROUP_NAME"
+$acr_name = "YOUR_ACR_NAME"
+$docker_image_name = "YOUR_DOCKER_IMAGE_NAME"
+$dockerfilePath = "PATH_TO_YOUR_DOCKERFILE"
 
 # Login to Azure using service principal
 az login --service-principal -u $sp_client_id -p $sp_client_pswd --tenant $sp_tenant_id
@@ -27,8 +19,27 @@ az acr create --resource-group $resource_group --name $acr_name --sku Standard
 # Obtaining access token for ACR login
 $acr_repo_token = (az acr login --name $acr_name --expose-token --only-show-errors | ConvertFrom-Json).accessToken
 
-# Docker login using the above token
+#docker login using the above token
 docker login "$acr_name.azurecr.io" --username 00000000-0000-0000-0000-000000000000 --password "$acr_repo_token"
+
+#obtain the all the versions tags present in the acr
+$imageTags = az acr repository show-tags --name $acr_name --repository $docker_image_name --output json | ConvertFrom-Json
+
+# Check if any tags are returned
+if ($imageTags) {
+    # Sort the tags to find the one with the greatest version
+    $latestTag = $imageTags | Sort-Object -Descending | Select-Object -First 1
+    
+    # Extract the version number from the tag and Store the version number in the $curr_version variable
+    $curr_version = $latestTag -replace "${docker_image_name}:", ""
+} else {
+    # If no tags are found, set $curr_version to "0.0"
+    $curr_version = "0.0"
+}
+
+# build the image with the new version
+docker build -t "${docker_image_name}:latest" -f "${dockerfilePath}".
+docker tag "${docker_image_name}:latest" "${acr_name}.azurecr.io/${docker_image_name}:${curr_version}"
 
 # Push the Docker image to ACR
 docker push "${acr_name}.azurecr.io/${docker_image_name}:${curr_version}"
@@ -56,5 +67,5 @@ if ($image_id) {
     }
 }
 
-# Run the pulled image on the local machine
+# run the pulled image on the local machine
 docker run -d -p 3000:3000 "${acr_name}.azurecr.io/${docker_image_name}:${curr_version}"
